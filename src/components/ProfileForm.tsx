@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { GlassCard } from './GlassCard';
 import { User, Mail, Briefcase, Save, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { biometricService } from '../services/biometricService';
 
 interface ProfileFormProps {
   embedding: number[];
@@ -20,23 +21,17 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ embedding, onSave }) =
     setIsSaving(true);
 
     try {
-      const response = await fetch('/api/save-profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          email,
-          role,
-          embedding
-        })
+      await biometricService.saveProfile({
+        name,
+        email,
+        role,
+        embedding
       });
 
-      if (response.ok) {
-        setIsSaved(true);
-        setTimeout(() => {
-          onSave();
-        }, 2000);
-      }
+      setIsSaved(true);
+      setTimeout(() => {
+        onSave();
+      }, 2000);
     } catch (error) {
       console.error('Error saving profile:', error);
     } finally {

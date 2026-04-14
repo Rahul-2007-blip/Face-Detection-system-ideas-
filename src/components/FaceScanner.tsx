@@ -10,6 +10,7 @@ import { Shield, Scan, Settings2, Info, Zap, Upload, AlertCircle, HelpCircle } f
 import { cn } from '@/src/lib/utils';
 import { FacePose } from '../lib/faceUtils';
 import { ControlInfoPanel } from './ControlInfoPanel';
+import { biometricService } from '../services/biometricService';
 
 // 3D Dots Component with Structured Light Simulation
 const FaceDots = ({ results, showMesh, showDots, depthMode, infraredMode, showPhysics, dimensions }: { 
@@ -326,16 +327,10 @@ export const FaceScanner: React.FC<{
     
     setLivenessPrompt("Analyzing 3D Structure...");
     try {
-      const response = await fetch('/api/check-3d', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          landmarks: results?.multiFaceLandmarks?.[0],
-          isPhoto: isPhotoUpload,
-          signals: latestLiveness.current.signals
-        })
+      const data = await biometricService.check3D({
+        isPhoto: isPhotoUpload,
+        signals: latestLiveness.current.signals
       });
-      const data = await response.json();
 
       if (data.is3D) {
         setLivenessSuccess(true);
@@ -382,19 +377,12 @@ export const FaceScanner: React.FC<{
 
   const verifyWithBackend = async () => {
     try {
-      const response = await fetch('/api/verify-face', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          embedding: currentEmbedding,
-          isPhoto: isPhotoUpload || liveness.score < 0.3, // Simulated spoof detection
-          sensitivity,
-          simulateNoise: false,
-          livenessSignals: liveness.signals
-        })
+      const data = await biometricService.verifyFace({
+        embedding: currentEmbedding,
+        isPhoto: isPhotoUpload || liveness.score < 0.3, // Simulated spoof detection
+        sensitivity,
+        simulateNoise: false
       });
-
-      const data = await response.json();
       
       if (data.success) {
         setStatus('success');

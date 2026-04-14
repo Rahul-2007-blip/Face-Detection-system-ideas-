@@ -3,15 +3,7 @@ import { GlassCard } from './GlassCard';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, User, Mail, Briefcase, Trash2, Edit3, Save, X, Database, ShieldCheck } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-
-interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  embedding: number[];
-  createdAt: string;
-}
+import { biometricService, Profile as UserProfile } from '../services/biometricService';
 
 export const EncryptedPanel: React.FC = () => {
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
@@ -22,11 +14,8 @@ export const EncryptedPanel: React.FC = () => {
   const fetchProfiles = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/profiles');
-      if (response.ok) {
-        const data = await response.json();
-        setProfiles(data);
-      }
+      const data = await biometricService.getAllProfiles();
+      setProfiles(data);
     } catch (error) {
       console.error('Error fetching profiles:', error);
     } finally {
@@ -42,8 +31,8 @@ export const EncryptedPanel: React.FC = () => {
     if (!confirm('Are you sure you want to delete this biometric profile? This action is irreversible.')) return;
     
     try {
-      const response = await fetch(`/api/profiles/${id}`, { method: 'DELETE' });
-      if (response.ok) {
+      const success = await biometricService.deleteProfile(id);
+      if (success) {
         setProfiles(profiles.filter(p => p.id !== id));
       }
     } catch (error) {
@@ -61,13 +50,9 @@ export const EncryptedPanel: React.FC = () => {
     if (!editingId) return;
 
     try {
-      const response = await fetch(`/api/profiles/${editingId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm)
-      });
+      const success = await biometricService.updateProfile(editingId, editForm);
 
-      if (response.ok) {
+      if (success) {
         setProfiles(profiles.map(p => p.id === editingId ? { ...p, ...editForm } : p));
         setEditingId(null);
       }
