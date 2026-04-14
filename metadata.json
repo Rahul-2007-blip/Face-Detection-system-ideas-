@@ -1,0 +1,8 @@
+{
+  "name": "FaceID 3D Simulator",
+  "description": "A futuristic 3D Face ID authentication system simulator with glassmorphism UI and real-time face mesh visualization.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
