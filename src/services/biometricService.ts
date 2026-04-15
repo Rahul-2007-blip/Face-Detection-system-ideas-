@@ -151,8 +151,11 @@ class BiometricService {
     const poseScore = signals?.pose || 0;
     const blinkScore = signals?.blink || 0;
     const textureScore = signals?.texture || 0;
+    const structuredLightScore = signals?.structuredLight || 0;
+    const infraredScore = signals?.infrared || 0;
+    const normalScore = signals?.normals || 0;
 
-    const finalScore = (depthScore * 0.5) + (parallaxScore * 0.2) + (poseScore * 0.1) + (blinkScore * 0.1) + (textureScore * 0.1);
+    const finalScore = (depthScore * 0.4) + (parallaxScore * 0.15) + (poseScore * 0.05) + (blinkScore * 0.05) + (textureScore * 0.05) + (structuredLightScore * 0.1) + (infraredScore * 0.1) + (normalScore * 0.1);
     const is3D = finalScore > 0.7;
 
     return {

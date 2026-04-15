@@ -133,9 +133,19 @@ export function calculate3DScore(results: Results, prevLandmarks: any[] | null):
   // Real skin has micro-fluctuations; photos are often too "perfect" or have sensor noise
   const textureScore = 0.8; // Placeholder for advanced pixel analysis
   
+  // 6. Structured Light Simulation (Pattern Deformation)
+  // Analyze if the grid of landmarks deforms correctly over the 3D surface
+  const structuredLightScore = simulateStructuredLight(landmarks);
+  
+  // 7. Infrared Mode Simulation (Intensity Variation)
+  const infraredScore = simulateInfrared(landmarks);
+  
+  // 8. Surface Normal Estimation (Curvature)
+  const normalScore = estimateSurfaceNormals(landmarks);
+
   // Advanced Weighted Scoring
-  // Depth (0.5), Parallax (0.2), Pose (0.1), Blink (0.1), Texture (0.1)
-  const score = (depthScore * 0.5) + (parallaxScore * 0.2) + (poseScore * 0.1) + (blinkScore * 0.1) + (textureScore * 0.1);
+  // Depth (0.4), Parallax (0.15), Pose (0.05), Blink (0.05), Texture (0.05), Structured Light (0.1), Infrared (0.1), Normals (0.1)
+  const score = (depthScore * 0.4) + (parallaxScore * 0.15) + (poseScore * 0.05) + (blinkScore * 0.05) + (textureScore * 0.05) + (structuredLightScore * 0.1) + (infraredScore * 0.1) + (normalScore * 0.1);
   
   return {
     score: Math.min(1, score),
@@ -145,11 +155,71 @@ export function calculate3DScore(results: Results, prevLandmarks: any[] | null):
       pose: poseScore,
       blink: blinkScore,
       texture: textureScore,
+      structuredLight: structuredLightScore,
+      infrared: infraredScore,
+      normals: normalScore,
       ear,
       zVariation: horizontalDepth,
       depthToWidthRatio
     }
   };
+}
+
+function simulateStructuredLight(landmarks: any[]): number {
+  // In a real system, we'd project a dot grid. 
+  // Here we simulate by checking the regularity of the landmark grid relative to depth.
+  // Real faces cause predictable non-linear deformation.
+  const nose = landmarks[1];
+  const forehead = landmarks[10];
+  const chin = landmarks[152];
+  
+  // Check vertical curvature
+  const midPointZ = (forehead.z + chin.z) / 2;
+  const verticalCurvature = Math.abs(nose.z - midPointZ);
+  
+  // If vertical curvature is too low, it's likely a flat surface
+  return verticalCurvature > 0.05 ? 1 : (verticalCurvature / 0.05);
+}
+
+function simulateInfrared(landmarks: any[]): number {
+  // Infrared sensors detect heat/reflectivity. 
+  // We simulate this by checking if the "intensity" (simulated by depth and angle) 
+  // follows a natural 3D falloff.
+  const nose = landmarks[1];
+  const leftCheek = landmarks[234];
+  const rightCheek = landmarks[454];
+  
+  const avgCheekZ = (leftCheek.z + rightCheek.z) / 2;
+  const intensityDiff = Math.abs(nose.z - avgCheekZ);
+  
+  // Real 3D faces have a distinct intensity gradient from nose to cheeks
+  return intensityDiff > 0.03 ? 1 : (intensityDiff / 0.03);
+}
+
+function estimateSurfaceNormals(landmarks: any[]): number {
+  // Estimate curvature by looking at the angle between different face segments
+  const getNormal = (p1: any, p2: any, p3: any) => {
+    const v1 = { x: p2.x - p1.x, y: p2.y - p1.y, z: p2.z - p1.z };
+    const v2 = { x: p3.x - p1.x, y: p3.y - p1.y, z: p3.z - p1.z };
+    return {
+      x: v1.y * v2.z - v1.z * v2.y,
+      y: v1.z * v2.x - v1.x * v2.z,
+      z: v1.x * v2.y - v1.y * v2.x
+    };
+  };
+
+  const n1 = getNormal(landmarks[1], landmarks[33], landmarks[61]); // Nose, Left Eye, Left Mouth
+  const n2 = getNormal(landmarks[1], landmarks[263], landmarks[291]); // Nose, Right Eye, Right Mouth
+  
+  // In 3D, these normals should point in significantly different directions
+  const dotProduct = n1.x * n2.x + n1.y * n2.y + n1.z * n2.z;
+  const magnitude1 = Math.sqrt(n1.x**2 + n1.y**2 + n1.z**2);
+  const magnitude2 = Math.sqrt(n2.x**2 + n2.y**2 + n2.z**2);
+  
+  const cosTheta = dotProduct / (magnitude1 * magnitude2);
+  
+  // If cosTheta is close to 1, the surfaces are parallel (flat image)
+  return cosTheta < 0.95 ? 1 : (1 - (cosTheta - 0.95) / 0.05);
 }
 
 export function calculateLiveness(results: Results, prevLandmarks: any[] | null): { score: number, signals: any } {

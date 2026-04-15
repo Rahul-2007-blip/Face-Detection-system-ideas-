@@ -1,28 +1,32 @@
 import React, { useRef, useState, useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { Points, PointMaterial, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 import { Results, MediaSourceType, useFaceMesh } from '@/src/hooks/useFaceMesh';
 import { GlassCard } from './GlassCard';
 import { PhysicsPanel } from './PhysicsPanel';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, Scan, Settings2, Info, Zap, Upload, AlertCircle, HelpCircle } from 'lucide-react';
+import { Shield, Scan, Settings2, Info, Zap, Upload, AlertCircle, HelpCircle, Lock } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { FacePose } from '../lib/faceUtils';
 import { ControlInfoPanel } from './ControlInfoPanel';
 import { biometricService } from '../services/biometricService';
 
 // 3D Dots Component with Structured Light Simulation
-const FaceDots = ({ results, showMesh, showDots, depthMode, infraredMode, showPhysics, dimensions }: { 
+const FaceDots = ({ results, showMesh, showDots, showNormals, depthMode, infraredMode, showPhysics, dimensions }: { 
   results: Results | null, 
   showMesh: boolean, 
   showDots: boolean, 
+  showNormals: boolean,
   depthMode: boolean,
   infraredMode: boolean,
   showPhysics: boolean,
   dimensions: { width: number, height: number }
 }) => {
   const pointsRef = useRef<THREE.Points>(null);
+  const meshRef = useRef<THREE.LineSegments>(null);
+  const normalsRef = useRef<THREE.LineSegments>(null);
+  const physicsRef = useRef<THREE.LineSegments>(null);
 
   const positions = useMemo(() => {
     if (!results?.multiFaceLandmarks?.[0]) return new Float32Array(0);
@@ -30,24 +34,16 @@ const FaceDots = ({ results, showMesh, showDots, depthMode, infraredMode, showPh
     const pos = new Float32Array(landmarks.length * 3);
     
     landmarks.forEach((lm, i) => {
-      // Map normalized coordinates (0-1) to pixel-space coordinates
-      // MediaPipe: (0,0) is top-left. Three.js: (0,0) is center.
-      let x = (lm.x - 0.5) * dimensions.width;
-      let y = (0.5 - lm.y) * dimensions.height;
-      let z = -lm.z * dimensions.width; // Depth scaled relative to width
-
-      // Simulate surface scattering/jitter in physics mode
-      if (showPhysics) {
-        x += (Math.random() - 0.5) * 2;
-        y += (Math.random() - 0.5) * 2;
-      }
-
+      const x = (lm.x - 0.5) * dimensions.width;
+      const y = (0.5 - lm.y) * dimensions.height;
+      const z = -lm.z * dimensions.width;
+      
       pos[i * 3] = x;
       pos[i * 3 + 1] = y;
       pos[i * 3 + 2] = z;
     });
     return pos;
-  }, [results, showPhysics, dimensions]);
+  }, [results, dimensions]);
 
   const colors = useMemo(() => {
     if (!results?.multiFaceLandmarks?.[0]) return new Float32Array(0);
@@ -58,46 +54,150 @@ const FaceDots = ({ results, showMesh, showDots, depthMode, infraredMode, showPh
       if (depthMode) {
         const intensity = Math.min(1, Math.max(0, 1 + lm.z * 10));
         cols[i * 3] = intensity;
-        cols[i * 3 + 1] = intensity * 0.5;
+        cols[i * 3 + 1] = intensity * 0.2;
         cols[i * 3 + 2] = 1 - intensity;
       } else if (infraredMode) {
-        cols[i * 3] = 1.0;
-        cols[i * 3 + 1] = 0.2;
-        cols[i * 3 + 2] = 0.2; 
-      } else {
-        cols[i * 3] = 0.2;
-        cols[i * 3 + 1] = 0.8;
+        const intensity = Math.min(1, Math.max(0, 1 + lm.z * 15));
+        cols[i * 3] = intensity;
+        cols[i * 3 + 1] = intensity * 0.1;
+        cols[i * 3 + 2] = intensity * 0.1;
+          } else {
+        cols[i * 3] = 0.0;
+        cols[i * 3 + 1] = 0.9;
         cols[i * 3 + 2] = 1.0;
       }
     });
     return cols;
   }, [results, depthMode, infraredMode]);
 
-  if (!showDots && !showMesh) return null;
+  const meshPositions = useMemo(() => {
+    if (!showMesh || !results?.multiFaceLandmarks?.[0]) return new Float32Array(0);
+    const landmarks = results.multiFaceLandmarks[0];
+    const pos = new Float32Array(landmarks.length * 6);
+    landmarks.forEach((lm, i) => {
+      const nextIdx = (i + 1) % landmarks.length;
+      const nextLm = landmarks[nextIdx];
+      
+      pos[i * 6] = (lm.x - 0.5) * dimensions.width;
+      pos[i * 6 + 1] = (0.5 - lm.y) * dimensions.height;
+      pos[i * 6 + 2] = -lm.z * dimensions.width;
+      
+      pos[i * 6 + 3] = (nextLm.x - 0.5) * dimensions.width;
+      pos[i * 6 + 4] = (0.5 - nextLm.y) * dimensions.height;
+      pos[i * 6 + 5] = -nextLm.z * dimensions.width;
+    });
+    return pos;
+  }, [results, showMesh, dimensions]);
+
+  const normalPositions = useMemo(() => {
+    if (!showNormals || !results?.multiFaceLandmarks?.[0]) return new Float32Array(0);
+    const landmarks = results.multiFaceLandmarks[0];
+    const pos = new Float32Array(landmarks.length * 6);
+    landmarks.forEach((lm, i) => {
+      const x = (lm.x - 0.5) * dimensions.width;
+      const y = (0.5 - lm.y) * dimensions.height;
+      const z = -lm.z * dimensions.width;
+      
+      pos[i * 6] = x;
+      pos[i * 6 + 1] = y;
+      pos[i * 6 + 2] = z;
+      
+      pos[i * 6 + 3] = x + (x * 0.1);
+      pos[i * 6 + 4] = y + (y * 0.1);
+      pos[i * 6 + 5] = z + 40;
+    });
+    return pos;
+  }, [results, showNormals, dimensions]);
+
+  const physicsPositions = useMemo(() => {
+    if (!showPhysics || !results?.multiFaceLandmarks?.[0]) return new Float32Array(0);
+    const landmarks = results.multiFaceLandmarks[0];
+    const pos = new Float32Array(landmarks.length * 6);
+    landmarks.forEach((lm, i) => {
+      const x = (lm.x - 0.5) * dimensions.width;
+      const y = (0.5 - lm.y) * dimensions.height;
+      const z = -lm.z * dimensions.width;
+      
+      pos[i * 6] = x;
+      pos[i * 6 + 1] = y;
+      pos[i * 6 + 2] = -500;
+      
+      pos[i * 6 + 3] = x;
+      pos[i * 6 + 4] = y;
+      pos[i * 6 + 5] = z;
+    });
+    return pos;
+  }, [results, showPhysics, dimensions]);
+
+  if (!showDots && !showMesh && !showNormals && !showPhysics) return null;
 
   return (
     <group>
-      <Points ref={pointsRef} positions={positions} colors={colors}>
-        <PointMaterial
-          transparent
-          vertexColors
-          size={depthMode ? 12 : 6}
-          sizeAttenuation={false}
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </Points>
+      {showDots && positions.length > 0 && (
+        <group>
+          <Points positions={positions} colors={colors}>
+            <PointMaterial
+              transparent
+              vertexColors
+              size={depthMode ? 10 : 4}
+              sizeAttenuation={false}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+              opacity={0.8}
+            />
+          </Points>
+          
+          {!depthMode && !infraredMode && (
+            <Points positions={positions}>
+              <PointMaterial
+                transparent
+                color="#06b6d4"
+                size={1}
+                sizeAttenuation={false}
+                depthWrite={false}
+                blending={THREE.AdditiveBlending}
+                opacity={0.2}
+              />
+            </Points>
+          )}
+        </group>
+      )}
       
-      {showPhysics && results?.multiFaceLandmarks?.[0] && (
+      {showMesh && meshPositions.length > 0 && (
         <lineSegments>
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
-              count={results.multiFaceLandmarks[0].length * 2}
-              array={new Float32Array(results.multiFaceLandmarks[0].flatMap(lm => [
-                (lm.x - 0.5) * dimensions.width, (0.5 - lm.y) * dimensions.height, -500, 
-                (lm.x - 0.5) * dimensions.width, (0.5 - lm.y) * dimensions.height, -lm.z * dimensions.width 
-              ]))}
+              count={meshPositions.length / 3}
+              array={meshPositions}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#06b6d4" transparent opacity={0.2} />
+        </lineSegments>
+      )}
+
+      {showNormals && normalPositions.length > 0 && (
+        <lineSegments>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={normalPositions.length / 3}
+              array={normalPositions}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#a855f7" transparent opacity={0.4} />
+        </lineSegments>
+      )}
+
+      {showPhysics && physicsPositions.length > 0 && (
+        <lineSegments>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={physicsPositions.length / 3}
+              array={physicsPositions}
               itemSize={3}
             />
           </bufferGeometry>
@@ -108,48 +208,14 @@ const FaceDots = ({ results, showMesh, showDots, depthMode, infraredMode, showPh
   );
 };
 
-const SurfaceNormals = ({ results, visible, dimensions }: { results: Results | null, visible: boolean, dimensions: { width: number, height: number } }) => {
-  if (!visible || !results?.multiFaceLandmarks?.[0]) return null;
-  
-  const landmarks = results.multiFaceLandmarks[0];
-  const linePositions = new Float32Array(landmarks.length * 6);
-  
-  landmarks.forEach((lm, i) => {
-    const x = (lm.x - 0.5) * dimensions.width;
-    const y = (0.5 - lm.y) * dimensions.height;
-    const z = -lm.z * dimensions.width;
-    
-    linePositions[i * 6] = x;
-    linePositions[i * 6 + 1] = y;
-    linePositions[i * 6 + 2] = z;
-    
-    linePositions[i * 6 + 3] = x + (x * 0.1);
-    linePositions[i * 6 + 4] = y + (y * 0.1);
-    linePositions[i * 6 + 5] = z + 50;
-  });
-
-  return (
-    <lineSegments>
-      <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          count={landmarks.length * 2}
-          array={linePositions}
-          itemSize={3}
-        />
-      </bufferGeometry>
-      <lineBasicMaterial color="#a855f7" transparent opacity={0.4} />
-    </lineSegments>
-  );
-};
-
 export const FaceScanner: React.FC<{ 
   mode?: 'enroll' | 'recognize' | 'default',
   onComplete: (success: boolean, message?: string, embedding?: number[], userName?: string) => void 
 }> = ({ mode = 'default', onComplete }) => {
   const [results, setResults] = useState<Results | null>(null);
   const [status, setStatus] = useState<'idle' | 'scanning' | 'detecting' | 'authenticating' | 'liveness' | 'success' | 'failed'>('scanning');
-  const [showMesh, setShowMesh] = useState(true);
+  const [showMesh, setShowMesh] = useState(false);
+  const [showDots, setShowDots] = useState(true);
   const [depthMode, setDepthMode] = useState(false);
   const [infraredMode, setInfraredMode] = useState(false);
   const [showNormals, setShowNormals] = useState(false);
@@ -199,19 +265,22 @@ export const FaceScanner: React.FC<{
           let progress = 0;
           setAutoAuthProgress(0);
           
+          // Speed up auto-trigger for Neural Engine (recognition)
+          const stabilityDuration = mode === 'recognize' ? 1000 : 3000;
+          
           autoAuthInterval.current = setInterval(() => {
-            progress += 1;
-            setAutoAuthProgress(progress);
+            progress += (100 / (stabilityDuration / 30));
+            setAutoAuthProgress(Math.min(100, progress));
           }, 30);
 
           autoAuthTimer.current = setTimeout(() => {
-            if (latestLiveness.current.score > 0.7) {
+            if (latestLiveness.current.score > 0.65) {
               handleStartAuth();
             }
             autoAuthTimer.current = null;
             if (autoAuthInterval.current) clearInterval(autoAuthInterval.current);
             setAutoAuthProgress(0);
-          }, 3000);
+          }, stabilityDuration);
         } else if (newClassification === '2d') {
           if (autoAuthTimer.current) {
             clearTimeout(autoAuthTimer.current);
@@ -291,6 +360,14 @@ export const FaceScanner: React.FC<{
     setLivenessSuccess(null);
     setConfidence(0);
     
+    // Auto-enable visualization modes for the scan
+    const prevMesh = showMesh;
+    const prevDots = showDots;
+    const prevDepth = depthMode;
+    setShowMesh(false);
+    setShowDots(true);
+    setDepthMode(true);
+    
     // Sequence of prompts for 3D parallax and movement verification
     const prompts = [
       { text: "Blink your eyes", check: (l: any, p: any) => l.signals.blink > 0.5 },
@@ -316,6 +393,10 @@ export const FaceScanner: React.FC<{
         setStatus('failed');
         setLivenessSuccess(false);
         setLivenessPrompt("2D Face Detected – Access Denied ❌");
+        // Restore previous modes
+        setShowMesh(prevMesh);
+        setShowDots(prevDots);
+        setDepthMode(prevDepth);
         setTimeout(() => onComplete(false, "3D verification failed: Movement timeout."), 2000);
         return;
       }
@@ -332,6 +413,11 @@ export const FaceScanner: React.FC<{
         signals: latestLiveness.current.signals
       });
 
+      // Restore previous modes
+      setShowMesh(prevMesh);
+      setShowDots(prevDots);
+      setDepthMode(prevDepth);
+
       if (data.is3D) {
         setLivenessSuccess(true);
         setLivenessPrompt(data.message);
@@ -345,11 +431,21 @@ export const FaceScanner: React.FC<{
         setTimeout(() => onComplete(false, "Spoof detected: 2D structure identified."), 2000);
       }
     } catch (err) {
+      // Restore previous modes
+      setShowMesh(prevMesh);
+      setShowDots(prevDots);
+      setDepthMode(prevDepth);
+      
       console.error('3D check error:', err);
       setStatus('failed');
       setLivenessPrompt("System Error ❌");
       setTimeout(() => onComplete(false, "3D analysis system error."), 2000);
     }
+  };
+
+  const handleCheck3D = async () => {
+    if (status !== 'detecting') return;
+    await startLivenessTest();
   };
 
   const handleStartAuth = async () => {
@@ -365,14 +461,15 @@ export const FaceScanner: React.FC<{
     setStatus('authenticating');
     
     let progress = 0;
+    const speed = mode === 'recognize' ? 10 : 5; // Faster for automatic recognition
     const interval = setInterval(() => {
-      progress += 5;
+      progress += speed;
       setConfidence(progress);
       if (progress >= 100) {
         clearInterval(interval);
         verifyWithBackend();
       }
-    }, 50);
+    }, 30);
   };
 
   const verifyWithBackend = async () => {
@@ -437,19 +534,19 @@ export const FaceScanner: React.FC<{
               </div>
             </div>
             
-            <div className="mb-8 rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-center">
-              <p className="text-[10px] font-bold text-yellow-400 uppercase tracking-widest">Pro Tip</p>
+            <div className="mb-8 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 text-center">
+              <p className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Recommended Fix</p>
               <p className="mt-1 text-xs text-white/60">
-                If permissions still won't register, try opening the app in a 
+                If the camera prompt doesn't appear, open the app in a 
                 <a 
                   href={window.location.href} 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="mx-1 text-cyan-400 underline hover:text-cyan-300"
+                  className="mx-1 font-bold text-cyan-400 underline hover:text-cyan-300"
                 >
                   new tab
                 </a> 
-                to bypass iframe restrictions.
+                to bypass browser iframe security restrictions.
               </p>
             </div>
 
@@ -525,17 +622,32 @@ export const FaceScanner: React.FC<{
             <FaceDots 
               results={results} 
               showMesh={showMesh} 
-              showDots={true} 
+              showDots={showDots} 
+              showNormals={showNormals}
               depthMode={depthMode} 
               infraredMode={infraredMode}
               showPhysics={showPhysics}
               dimensions={dimensions}
             />
-            <SurfaceNormals results={results} visible={showNormals} dimensions={dimensions} />
           </Canvas>
         </div>
 
         <AnimatePresence>
+          {status === 'scanning' && mode === 'recognize' && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/20 backdrop-blur-[2px]"
+            >
+              <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-black/40 text-white/40">
+                <Lock size={32} className="animate-pulse" />
+              </div>
+              <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.4em] text-white/40">
+                Looking for face...
+              </p>
+            </motion.div>
+          )}
           {(status === 'authenticating' || status === 'liveness') && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -724,6 +836,10 @@ export const FaceScanner: React.FC<{
               <span className="text-xs font-medium">Mesh</span>
               <div className={cn("h-2 w-2 rounded-full", showMesh ? "bg-cyan-400" : "bg-white/20")} />
             </button>
+            <button onClick={() => setShowDots(!showDots)} className={cn("flex items-center justify-between rounded-xl border p-3 transition-all", showDots ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-400" : "border-white/10 text-white/40")}>
+              <span className="text-xs font-medium">Dots</span>
+              <div className={cn("h-2 w-2 rounded-full", showDots ? "bg-cyan-400" : "bg-white/20")} />
+            </button>
             <button onClick={() => setDepthMode(!depthMode)} className={cn("flex items-center justify-between rounded-xl border p-3 transition-all", depthMode ? "border-purple-500/50 bg-purple-500/10 text-purple-400" : "border-white/10 text-white/40")}>
               <span className="text-xs font-medium">Depth</span>
               <div className={cn("h-2 w-2 rounded-full", depthMode ? "bg-purple-400" : "bg-white/20")} />
@@ -736,15 +852,23 @@ export const FaceScanner: React.FC<{
               <span className="text-xs font-medium">Normals</span>
               <div className={cn("h-2 w-2 rounded-full", showNormals ? "bg-orange-400" : "bg-white/20")} />
             </button>
-            <button onClick={() => setShowPhysics(!showPhysics)} className={cn("flex items-center justify-between rounded-xl border p-3 transition-all", showPhysics ? "border-blue-500/50 bg-blue-500/10 text-blue-400" : "border-white/10 text-white/40")}>
-              <span className="text-xs font-medium">Physics</span>
-              <div className={cn("h-2 w-2 rounded-full", showPhysics ? "bg-blue-400" : "bg-white/20")} />
+            <button 
+              onClick={handleCheck3D} 
+              disabled={status !== 'detecting'}
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-xl border p-3 transition-all",
+                status === 'detecting' ? "border-cyan-500 bg-cyan-500/20 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]" : "border-white/5 bg-white/5 text-white/20"
+              )}
+            >
+              <Scan size={16} />
+              <span className="text-xs font-bold uppercase tracking-widest">Check 2D vs 3D</span>
             </button>
           </div>
 
           <ControlInfoPanel 
             activeToggles={[
               showMesh && 'mesh',
+              showDots && 'dots',
               depthMode && 'depth',
               infraredMode && 'infrared',
               showNormals && 'normals',

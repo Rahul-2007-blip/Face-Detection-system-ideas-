@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Info, Cpu, Layers, Eye, Move, Activity } from 'lucide-react';
+import { Info, Cpu, Layers, Eye, Move, Activity, Scan } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 
 interface ControlInfo {
@@ -21,6 +21,15 @@ const CONTROL_DATA: Record<string, ControlInfo> = {
     concept: 'Topology reconstruction using 468 3D points to track facial geometry in real-time.',
     logic: 'V = {p₁, p₂, ..., p₄₆₈}',
     icon: <Layers size={14} />,
+    color: 'text-cyan-400',
+  },
+  dots: {
+    id: 'dots',
+    name: 'Structured Dots',
+    purpose: '3D Surface Projection',
+    concept: 'Projecting a grid of infrared dots to measure surface deformation and depth.',
+    logic: 'P(x,y) = Σ δ(x-xᵢ, y-yᵢ)',
+    icon: <Scan size={14} />,
     color: 'text-cyan-400',
   },
   depth: {

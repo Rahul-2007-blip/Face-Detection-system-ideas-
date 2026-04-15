@@ -92,14 +92,18 @@ export const useFaceMesh = (
 
         if (mediaSource.type === 'camera') {
           if (videoRef.current) {
+            if (typeof window !== 'undefined' && !window.isSecureContext) {
+              throw new Error('Camera access requires a secure context (HTTPS). Please ensure you are using a secure connection.');
+            }
+
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-              throw new Error('Camera API is not available in this browser. Please ensure you are using HTTPS or localhost.');
+              throw new Error('Camera API is not available in this browser. This may be due to iframe restrictions or an insecure connection.');
             }
             
             // Proactively check permission state if possible
             const permState = await checkPermissions();
             if (permState === 'denied') {
-              throw new Error('Camera access was denied. Please click the camera icon in your browser address bar to allow access.');
+              throw new Error('Camera access was denied. Please click the camera icon in your browser address bar to allow access, or try opening the app in a new tab.');
             }
 
             const stream = await navigator.mediaDevices.getUserMedia({
