@@ -9,12 +9,13 @@ import { FaceScanner } from './components/FaceScanner';
 import { ProfileForm } from './components/ProfileForm';
 import { ComparisonSection } from './components/ComparisonSection';
 import { EncryptedPanel } from './components/EncryptedPanel';
+import { SecureEnclavePanel } from './components/SecureEnclavePanel';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShieldCheck, ShieldAlert, ArrowLeft } from 'lucide-react';
 import { GlassCard } from './components/GlassCard';
 import { cn } from './lib/utils';
 
-type Screen = 'landing' | 'scanning' | 'result' | 'enroll' | 'manage';
+type Screen = 'landing' | 'scanning' | 'result' | 'enroll' | 'manage' | 'enclave';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('landing');
@@ -24,7 +25,7 @@ export default function App() {
   const [matchedName, setMatchedName] = useState<string | null>(null);
   const [activeMode, setActiveMode] = useState<'enroll' | 'recognize' | 'default'>('default');
 
-  const handleStart = (mode?: 'enroll' | 'manage' | 'recognize') => {
+  const handleStart = (mode?: 'enroll' | 'manage' | 'recognize' | 'enclave') => {
     setLastResult(null);
     setResultMessage('');
     setLastEmbedding(null);
@@ -32,11 +33,20 @@ export default function App() {
     
     if (mode === 'manage') {
       setScreen('manage');
+    } else if (mode === 'enclave') {
+      setScreen('enclave');
     } else {
       setActiveMode(mode === 'enroll' ? 'enroll' : 'recognize');
       setScreen('scanning');
     }
   };
+
+  React.useEffect(() => {
+    const handleEnrollEvent = () => handleStart('enroll');
+    window.addEventListener('start-enroll', handleEnrollEvent);
+    return () => window.removeEventListener('start-enroll', handleEnrollEvent);
+  }, []);
+
   const handleComplete = (success: boolean, message?: string, embedding?: number[], userName?: string) => {
     setLastResult(success);
     setResultMessage(message || '');
@@ -187,6 +197,25 @@ export default function App() {
               Back to Home
             </button>
             <EncryptedPanel />
+          </motion.div>
+        )}
+
+        {screen === 'enclave' && (
+          <motion.div
+            key="enclave"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="flex min-h-screen flex-col items-center justify-center p-4 pt-20"
+          >
+            <button
+              onClick={() => setScreen('landing')}
+              className="mb-8 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-white/40 transition-colors hover:text-white"
+            >
+              <ArrowLeft size={16} />
+              Back to Home
+            </button>
+            <SecureEnclavePanel />
           </motion.div>
         )}
       </AnimatePresence>

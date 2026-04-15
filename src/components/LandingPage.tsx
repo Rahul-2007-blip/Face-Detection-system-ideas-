@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { GlassCard } from './GlassCard';
 import { Shield, Scan, Cpu, Lock } from 'lucide-react';
 
-export const LandingPage: React.FC<{ onStart: (mode?: 'enroll' | 'manage' | 'recognize') => void }> = ({ onStart }) => {
+export const LandingPage: React.FC<{ onStart: (mode?: 'enroll' | 'manage' | 'recognize' | 'enclave') => void }> = ({ onStart }) => {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-4 py-20">
       <motion.div
@@ -32,7 +32,7 @@ export const LandingPage: React.FC<{ onStart: (mode?: 'enroll' | 'manage' | 'rec
             <span className="text-[10px] font-bold uppercase tracking-widest text-white/40 group-hover:text-white transition-colors">Neural Engine</span>
           </button>
           <button 
-            onClick={() => onStart('enroll')}
+            onClick={() => onStart('enclave')}
             className="flex flex-col items-center gap-2 group transition-all hover:scale-110"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/5 text-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)] group-hover:bg-cyan-400/20 group-hover:shadow-[0_0_25px_rgba(34,211,238,0.5)] transition-all">
